@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: gitea
+  name: gitea
+  namespace: gitea
+
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: gitea
+  template:
+    metadata:
+      labels:
+        app: gitea
+    spec:
+      volumes:
+        - name: gitea-volume
+          persistentVolumeClaim:
+            claimName: gitea-pvc
+      containers:
+        - image: gitea/gitea:latest
+          name: gitea
+          volumeMounts:
+            - mountPath: "/data"
+              name: gitea-volume
+   affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: kubernetes.io/os
+            operator: In
+            values:
+            - linux
+ # хотим максимально отказоустойчивый deployment 
+  readinessProbe:
+    failureThreshold: 3
+    httpGet:
+      path: /
+      port: 80
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 1
+  
+  livenessProbe:
+    failureThreshold: 3
+    httpGet:
+      path: /
+      port: 80
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 1
+    initialDelaySeconds: 10
+# приложение требует около 5-10 секунд для инициализации        
+  startupProbe:
+    httpGet:
+      path: /
+      port: 80
+    failureThreshold: 10
+    periodSeconds: 10
+# (на первые запросы приложению требуется значительно больше ресурсов CPU, в дальнейшем потребление ровное в районе 0.1 CPU). По памяти всегда “ровно” в районе 128M memory
+ 
+  resources:
+    requests:
+      cpu: 10m
+      memory: 128Mi
+    limits:
+      cpu: 20m
+      memory: 128Mi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gitea-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
